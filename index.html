@@ -1,0 +1,107 @@
+<html>
+<head>
+  <meta charset="utf-8">
+  <title></title>
+</head>
+<body>
+  <div style="background-color: black">
+    <video id="this" autoplay></video>
+  </div>
+  <div style="background-color: black">
+    <video id="other" autoplay></video>
+  </div>
+
+  <textarea id='textArea' rows="8" cols="80"></textarea>
+  <input type="text" id="textInput" value="">
+  <button id='button' type="button" name="button">Wyślij</button>
+
+  <script src="https://code.jquery.com/jquery-1.10.2.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.0.3/socket.io.js"></script>
+  <script type="text/javascript">
+  var socket = io('10.0.0.65:3000');
+  var yourConn;
+
+  socket.on('new message', function (data) {
+    console.log('get message');
+    $("#textArea").text($("#textArea").text() + " \n" + data)
+  })
+
+  function hasUserMedia()
+  {
+    return navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
+  }
+
+  navigator.getUserMedia = hasUserMedia();
+  navigator.getUserMedia({ video: true, audio: true }, function (stream) {
+    var video = document.getElementById('this');
+    video.src = window.URL.createObjectURL(stream);
+
+    var configuration = {
+        'iceServers': [
+          {
+            'urls': 'stun:stun.l.google.com:19302'
+          },
+          {
+            'urls': 'turn:192.158.29.39:3478?transport=udp',
+            'credential': 'JZEOEt2V3Qb0y27GRntt2u2PAYA=',
+            'username': '28224511:1379330808'
+          },
+          {
+            'urls': 'turn:192.158.29.39:3478?transport=tcp',
+            'credential': 'JZEOEt2V3Qb0y27GRntt2u2PAYA=',
+            'username': '28224511:1379330808'
+          }
+        ]
+    };
+    if(navigator.webkitGetUserMedia){
+      yourConn = new webkitRTCPeerConnection(configuration);
+    }else{
+      yourConn = new RTCPeerConnection(configuration);
+    }
+
+    yourConn.addStream(stream);
+    yourConn.onaddstream = function (e) {
+      document.getElementById('other').src = window.URL.createObjectURL(e.stream);
+    };
+
+    socket.on('candidate', (data) => {
+      yourConn.addIceCandidate(new RTCIceCandidate(data));
+    });
+
+    yourConn.onicecandidate = function (event) {
+      if(event.candidate){
+        socket.emit('candidate', event.candidate);
+      }
+    }
+
+    $('button').on('click', function () {
+      socket.emit("new message", $("#textInput").val());
+      yourConn.createOffer(
+        function (offer) {
+          socket.emit('offer', offer);
+          yourConn.setLocalDescription(offer);
+        }, function (error) {
+          alert("Error when creating an offer");
+        });
+    })
+
+    socket.on('answer', function(answer) {
+        yourConn.setRemoteDescription(new RTCSessionDescription(answer));
+    })
+
+    socket.on('offer', function (offer) {
+      yourConn.setRemoteDescription(new RTCSessionDescription(offer));
+      yourConn.createAnswer(function (answer) {
+        yourConn.setLocalDescription(answer);
+        socket.emit("answer", answer);
+      }, function (error) {
+        alert("Error when creating an answer");
+      });
+    })
+
+  }, function (err) {
+    console.log(err);
+  })
+  </script>
+</body>
+</html>
